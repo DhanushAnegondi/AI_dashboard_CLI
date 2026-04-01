@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from watchdog.events import FileModifiedEvent, FileSystemEventHandler
-from watchdog.observers.polling import PollingObserver
+from watchdog.observers import Observer
 
 from config import (
     ACTIVE_SESSION_WINDOW_SECONDS,
@@ -203,7 +203,7 @@ class ClaudeCollector:
 
     def __init__(self, state: DashboardState) -> None:
         self._state = state
-        self._observer: PollingObserver | None = None
+        self._observer: Observer | None = None
         self._lock = threading.Lock()
 
         # Currently tracked session file
@@ -225,9 +225,7 @@ class ClaudeCollector:
         self._initial_scan()
 
         handler = _ClaudeFileHandler(self)
-        # PollingObserver is more reliable across restricted macOS environments
-        # than the default FSEvents backend.
-        self._observer = PollingObserver()
+        self._observer = Observer()
         if CLAUDE_PROJECTS_DIR.exists():
             self._observer.schedule(handler, str(CLAUDE_PROJECTS_DIR), recursive=True)
         self._observer.start()

@@ -124,7 +124,7 @@ def check_thresholds(state: DashboardState) -> None:
         _add_event(
             state,
             "WARNING",
-            f"Codex context at {codex_pct:.0f}% ({codex.current_context_tokens:,}/{codex.context_window:,} tokens)",
+            f"Codex context at {codex_pct:.0f}% ({codex.total_tokens:,}/{codex.context_window:,} tokens)",
             "codex",
         )
         with state.lock:
@@ -134,7 +134,7 @@ def check_thresholds(state: DashboardState) -> None:
         _add_event(
             state,
             "ERROR",
-            f"Codex context CRITICAL at {codex_pct:.0f}% ({codex.current_context_tokens:,}/{codex.context_window:,} tokens)",
+            f"Codex context CRITICAL at {codex_pct:.0f}% ({codex.total_tokens:,}/{codex.context_window:,} tokens)",
             "codex",
         )
         with state.lock:

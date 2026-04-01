@@ -110,15 +110,12 @@ class CodexState:
     model: str = ""
     context_window: int = 258_400
 
-    # From token_count events (cumulative session totals)
+    # From token_count events (cumulative)
     input_tokens: int = 0
     cached_input_tokens: int = 0
     output_tokens: int = 0
     reasoning_output_tokens: int = 0
     total_tokens: int = 0
-
-    # From token_count events (latest request / current context estimate)
-    current_context_tokens: int = 0
 
     rate_limits: CodexRateLimits = field(default_factory=CodexRateLimits)
 
@@ -129,8 +126,7 @@ class CodexState:
     def context_fill_pct(self) -> float:
         if self.context_window == 0:
             return 0.0
-        tokens = self.current_context_tokens or self.total_tokens
-        return min(100.0, tokens / self.context_window * 100.0)
+        return min(100.0, self.total_tokens / self.context_window * 100.0)
 
     @property
     def is_active(self) -> bool:

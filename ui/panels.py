@@ -9,11 +9,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from config import HISTORY_PANEL_ROWS
 from config import CRIT_THRESHOLD_PCT, LEVEL_STYLES, WARN_THRESHOLD_PCT
 from state import ClaudeState, CodexState, EventLogEntry, HistoricalState
-from ui.feature_versions import feature_version
-from ui.insights import SessionInsights
 from ui.widgets import context_bar, format_tokens, sparkline
 
 
@@ -35,7 +32,7 @@ def _format_reset_countdown(resets_at: int) -> str:
     return f"Resets in {hours}h {mins}m"
 
 
-def make_claude_panel(state: ClaudeState, insights: SessionInsights) -> Panel:
+def make_claude_panel(state: ClaudeState) -> Panel:
     """Build the Claude status panel."""
     if not state.is_active:
         body = Text("No active session", style="dim")
@@ -47,22 +44,6 @@ def make_claude_panel(state: ClaudeState, insights: SessionInsights) -> Panel:
         Text(""),
         Text("Context Window", style="bold"),
         context_bar(state.total_context_tokens, state.context_window, state.context_fill_pct),
-        Text(
-            f"Headroom  {format_tokens(insights.headroom_tokens)} tokens remaining",
-            style="green",
-        ),
-        Text(
-            f"Last update  {insights.age_label}  |  Trend {insights.trend_symbol} {insights.trend_label}",
-            style="dim",
-        ),
-        Text(
-            f"Velocity  {insights.velocity_label}",
-            style="cyan",
-        ),
-        Text(
-            insights.stale_label,
-            style="yellow" if insights.is_stale else "dim",
-        ),
         Text(""),
         Text(
             "Latest turn  "
@@ -79,23 +60,19 @@ def make_claude_panel(state: ClaudeState, insights: SessionInsights) -> Panel:
             style="green",
         ),
     )
-    return Panel(
-        body,
-        title=f"Claude Code ({feature_version('headroom')})",
-        border_style=_panel_border_style(state.context_fill_pct),
-    )
+    return Panel(body, title="Claude Code", border_style=_panel_border_style(state.context_fill_pct))
 
 
-def make_codex_panel(state: CodexState, insights: SessionInsights) -> Panel:
+def make_codex_panel(state: CodexState) -> Panel:
     """Build the Codex status panel."""
     if not state.is_active:
         body = Text("No active session", style="dim")
         return Panel(body, title="Codex", border_style="white")
 
     usage_hint = (
-        "Current request at or above model context window"
-        if state.current_context_tokens >= state.context_window
-        else "Current request within model context window"
+        "At or above model context window"
+        if state.total_tokens >= state.context_window
+        else "Within model context window"
     )
 
     body = Group(
@@ -103,60 +80,25 @@ def make_codex_panel(state: CodexState, insights: SessionInsights) -> Panel:
         Text(f"Model    {state.model or 'Unknown'}", style="cyan"),
         Text(""),
         Text("Context Window", style="bold"),
-        context_bar(state.current_context_tokens, state.context_window, state.context_fill_pct),
-        Text(
-            f"Headroom  {format_tokens(insights.headroom_tokens)} tokens remaining",
-            style="green",
-        ),
-        Text(
-            usage_hint,
-            style="bold red" if state.current_context_tokens >= state.context_window else "dim",
-        ),
-        Text(
-            f"Last update  {insights.age_label}  |  Trend {insights.trend_symbol} {insights.trend_label}",
-            style="dim",
-        ),
-        Text(
-            f"Velocity  {insights.velocity_label}",
-            style="cyan",
-        ),
-        Text(
-            insights.stale_label,
-            style="yellow" if insights.is_stale else "dim",
-        ),
+        context_bar(state.total_tokens, state.context_window, state.context_fill_pct),
+        Text(usage_hint, style="bold red" if state.total_tokens >= state.context_window else "dim"),
         Text(""),
-        Text(
-            "Current request  "
-            f"{format_tokens(state.current_context_tokens)} tokens",
-            style="green",
-        ),
         Text(
             "Session total  "
             f"in {format_tokens(state.input_tokens)}  "
             f"cached {format_tokens(state.cached_input_tokens)}  "
             f"out {format_tokens(state.output_tokens)}  "
-            f"reasoning {format_tokens(state.reasoning_output_tokens)}  "
-            f"all {format_tokens(state.total_tokens)}",
+            f"reasoning {format_tokens(state.reasoning_output_tokens)}",
             style="dim",
         ),
         Text(
-            "Primary limit  "
-            f"{state.rate_limits.primary_used_pct:.0f}% used  "
-            f"| {_format_reset_countdown(state.rate_limits.primary_resets_at)}",
-            style="yellow",
-        ),
-        Text(
-            "Weekly limit  "
-            f"{state.rate_limits.secondary_used_pct:.0f}% used  "
-            f"| {_format_reset_countdown(state.rate_limits.secondary_resets_at)}",
+            "Rate limits  "
+            f"5h {state.rate_limits.primary_used_pct:.0f}% ({_format_reset_countdown(state.rate_limits.primary_resets_at)})  "
+            f"Weekly {state.rate_limits.secondary_used_pct:.0f}% ({_format_reset_countdown(state.rate_limits.secondary_resets_at)})",
             style="yellow",
         ),
     )
-    return Panel(
-        body,
-        title=f"Codex ({feature_version('codex_context_split')})",
-        border_style=_panel_border_style(state.context_fill_pct),
-    )
+    return Panel(body, title="Codex", border_style=_panel_border_style(state.context_fill_pct))
 
 
 def make_today_panel(state: HistoricalState) -> Panel:
@@ -204,52 +146,6 @@ def make_today_panel(state: HistoricalState) -> Panel:
     table.add_row(Text(f"Activity  {spark}", style="bold"), Text(codex_line, style="dim"))
 
     return Panel(table, title="Today", border_style="bright_blue")
-
-
-def make_history_panel(state: HistoricalState) -> Panel:
-    """Build a toggled comparison/history panel."""
-    claude_table = Table(title="Claude Recent Days", expand=True, box=None)
-    claude_table.add_column("Date", style="cyan", no_wrap=True)
-    claude_table.add_column("Msgs", justify="right")
-    claude_table.add_column("Sessions", justify="right")
-    claude_table.add_column("Tools", justify="right")
-
-    recent_days = state.daily_activity[-HISTORY_PANEL_ROWS:]
-    if recent_days:
-        for entry in reversed(recent_days):
-            claude_table.add_row(
-                entry.date,
-                format_tokens(entry.message_count),
-                format_tokens(entry.session_count),
-                format_tokens(entry.tool_call_count),
-            )
-    else:
-        claude_table.add_row("No data", "-", "-", "-")
-
-    codex_table = Table(title="Recent Codex Sessions", expand=True, box=None)
-    codex_table.add_column("Session", style="cyan", no_wrap=True)
-    codex_table.add_column("Model")
-    codex_table.add_column("Tokens", justify="right")
-    codex_table.add_column("Title", overflow="fold")
-
-    recent_sessions = state.recent_codex_sessions[:HISTORY_PANEL_ROWS]
-    if recent_sessions:
-        for session in recent_sessions:
-            codex_table.add_row(
-                session.session_id[:8],
-                session.model or "unknown",
-                format_tokens(session.tokens_used),
-                session.title or session.cwd or "-",
-            )
-    else:
-        codex_table.add_row("No data", "-", "-", "-")
-
-    body = Group(claude_table, Text(""), codex_table)
-    return Panel(
-        body,
-        title=f"History ({feature_version('history_toggle')})",
-        border_style="bright_blue",
-    )
 
 
 def make_events_panel(events: list[EventLogEntry], *, limit: int = 10) -> Panel:

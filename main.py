@@ -29,7 +29,6 @@ from state import (
     EventLogEntry,
     HistoricalState,
 )
-from ui.insights import DashboardUIState
 from ui.renderer import build_layout
 
 
@@ -68,7 +67,6 @@ def _seed_mock_data(state: DashboardState) -> None:
             output_tokens=40,
             reasoning_output_tokens=24,
             total_tokens=17_630,
-            current_context_tokens=17_630,
             rate_limits=CodexRateLimits(
                 primary_used_pct=1.0,
                 primary_window_minutes=300,
@@ -84,53 +82,41 @@ def _seed_mock_data(state: DashboardState) -> None:
     state.update_historical(
         HistoricalState(
             daily_activity=[
-                DailyActivity(
-                    date=(now - timedelta(days=day)).strftime("%Y-%m-%d"),
-                    message_count=count,
-                    session_count=max(1, count // 120),
-                    tool_call_count=count // 3,
-                )
+                DailyActivity(date=(now - timedelta(days=day)).strftime("%Y-%m-%d"), message_count=count, session_count=max(1, count // 120), tool_call_count=count // 3)
                 for day, count in reversed(
                     list(
                         enumerate(
                             [
-                                377,
-                                233,
-                                144,
-                                89,
-                                55,
-                                34,
-                                21,
-                                13,
-                                8,
-                                5,
-                                3,
-                                4,
-                                5,
-                                6,
-                                8,
-                                11,
-                                17,
-                                28,
-                                49,
-                                112,
-                                73,
-                                52,
-                                24,
                                 18,
+                                24,
+                                52,
+                                73,
+                                112,
+                                49,
+                                28,
+                                17,
+                                11,
+                                8,
+                                6,
+                                5,
+                                4,
+                                3,
+                                5,
+                                8,
+                                13,
+                                21,
+                                34,
+                                55,
+                                89,
+                                144,
+                                233,
+                                377,
                             ]
                         )
                     )
                 )
             ],
             daily_model_tokens=[
-                DailyModelTokens(
-                    date=(now - timedelta(days=1)).strftime("%Y-%m-%d"),
-                    tokens_by_model={
-                        "claude-sonnet-4-6": 52_105,
-                        "gpt-5.4": 11_870,
-                    },
-                ),
                 DailyModelTokens(
                     date=now.strftime("%Y-%m-%d"),
                     tokens_by_model={
@@ -185,13 +171,13 @@ class _KeyboardListener:
         if self._enabled and self._old_settings is not None:
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, self._old_settings)
 
-    def read_key(self) -> str | None:
+    def should_quit(self) -> bool:
         if not self._enabled:
-            return None
+            return False
         readable, _, _ = select.select([sys.stdin], [], [], 0)
         if not readable:
-            return None
-        return sys.stdin.read(1).lower()
+            return False
+        return sys.stdin.read(1).lower() == "q"
 
 
 def _start_collectors(state: DashboardState) -> list[object]:
@@ -224,32 +210,26 @@ def main() -> int:
     _configure_logging()
     console = Console()
     state = DashboardState()
-    ui_state = DashboardUIState()
     collectors: list[object] = []
 
     if args.mock:
         _seed_mock_data(state)
     else:
         collectors = _start_collectors(state)
-    ui_state.record_snapshot(state)
 
     try:
         with _KeyboardListener() as keyboard:
             with Live(
-                build_layout(state, ui_state, width=console.size.width),
+                build_layout(state, width=console.size.width),
                 console=console,
                 refresh_per_second=0.5,
                 screen=True,
             ) as live:
                 while True:
-                    key = keyboard.read_key()
-                    if key == "q":
+                    if keyboard.should_quit():
                         break
-                    if key == "h":
-                        ui_state.toggle_history()
                     check_thresholds(state)
-                    ui_state.record_snapshot(state)
-                    live.update(build_layout(state, ui_state, width=console.size.width))
+                    live.update(build_layout(state, width=console.size.width))
                     time.sleep(2.0)
     except KeyboardInterrupt:
         pass

@@ -47,8 +47,7 @@ def _make_codex(fill_pct: float, context_window: int = 258_400) -> CodexState:
         session_id="test",
         model="gpt-5.4",
         context_window=context_window,
-        total_tokens=tokens * 10,
-        current_context_tokens=tokens,
+        total_tokens=tokens,
         last_updated=datetime.now(),
     )
 

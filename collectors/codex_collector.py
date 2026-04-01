@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from watchdog.events import FileModifiedEvent, FileSystemEventHandler
-from watchdog.observers.polling import PollingObserver
+from watchdog.observers import Observer
 
 from config import (
     ACTIVE_SESSION_WINDOW_SECONDS,
@@ -92,13 +92,12 @@ def _parse_token_count_event(raw: str) -> tuple[CodexState | None, CodexRateLimi
     except json.JSONDecodeError:
         return None, None
 
-    payload = entry.get("payload") or {}
+    payload = entry.get("payload", {})
     if payload.get("type") != "token_count":
         return None, None
 
-    info = payload.get("info") or {}
+    info = payload.get("info", {})
     total = info.get("total_token_usage", {})
-    last = info.get("last_token_usage", {}) or {}
     context_window = info.get("model_context_window", 258_400)
 
     rl_raw = payload.get("rate_limits", {})
@@ -122,7 +121,6 @@ def _parse_token_count_event(raw: str) -> tuple[CodexState | None, CodexRateLimi
         output_tokens=total.get("output_tokens", 0),
         reasoning_output_tokens=total.get("reasoning_output_tokens", 0),
         total_tokens=total.get("total_tokens", 0),
-        current_context_tokens=last.get("total_tokens", total.get("total_tokens", 0)),
         rate_limits=rate_limits,
     )
     return partial, rate_limits
@@ -251,7 +249,7 @@ class CodexCollector:
 
     def __init__(self, state: DashboardState) -> None:
         self._state = state
-        self._observer: PollingObserver | None = None
+        self._observer: Observer | None = None
         self._sqlite_worker: _SqlitePollWorker | None = None
         self._lock = threading.Lock()
 
@@ -270,9 +268,7 @@ class CodexCollector:
         self._initial_scan()
 
         handler = _CodexFileHandler(self)
-        # PollingObserver is more reliable across restricted macOS environments
-        # than the default FSEvents backend.
-        self._observer = PollingObserver()
+        self._observer = Observer()
         if CODEX_SESSIONS_DIR.exists():
             self._observer.schedule(handler, str(CODEX_SESSIONS_DIR), recursive=True)
         self._observer.start()
@@ -324,7 +320,6 @@ class CodexCollector:
                     output_tokens=partial.output_tokens,
                     reasoning_output_tokens=partial.reasoning_output_tokens,
                     total_tokens=partial.total_tokens,
-                    current_context_tokens=partial.current_context_tokens,
                     rate_limits=partial.rate_limits,
                     session_file=str(path),
                     last_updated=datetime.now(),
@@ -411,7 +406,6 @@ class CodexCollector:
                 output_tokens=latest_partial.output_tokens,
                 reasoning_output_tokens=latest_partial.reasoning_output_tokens,
                 total_tokens=latest_partial.total_tokens,
-                current_context_tokens=latest_partial.current_context_tokens,
                 rate_limits=latest_partial.rate_limits,
                 session_file=str(path),
                 last_updated=datetime.now(),
@@ -438,7 +432,6 @@ class CodexCollector:
                     output_tokens=self._current_state.output_tokens,
                     reasoning_output_tokens=self._current_state.reasoning_output_tokens,
                     total_tokens=self._current_state.total_tokens,
-                    current_context_tokens=self._current_state.current_context_tokens,
                     rate_limits=self._current_state.rate_limits,
                     session_file=self._current_state.session_file,
                     last_updated=datetime.now(),

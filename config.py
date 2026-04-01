@@ -51,14 +51,6 @@ UI_REFRESH_SECONDS: float = 2.0
 STATS_POLL_SECONDS: int = 60
 CODEX_DB_POLL_SECONDS: int = 5
 
-# UI-derived insights
-STALE_UPDATE_SECONDS: int = 180
-TREND_LOOKBACK_SECONDS: int = 60
-TREND_DELTA_PCT: float = 2.0
-VELOCITY_LOOKBACK_SECONDS: int = 600
-MAX_UI_SAMPLES: int = 180
-HISTORY_PANEL_ROWS: int = 5
-
 # ---------------------------------------------------------------------------
 # Event log: maximum entries kept in memory
 # ---------------------------------------------------------------------------

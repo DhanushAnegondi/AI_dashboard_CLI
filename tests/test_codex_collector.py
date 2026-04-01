@@ -15,7 +15,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
 
 import pytest
 
@@ -37,7 +36,6 @@ from collectors.codex_collector import (
 
 def _make_token_count_line(
     total_tokens: int = 1000,
-    last_total_tokens: Optional[int] = None,
     input_tokens: int = 800,
     cached_input: int = 600,
     output_tokens: int = 100,
@@ -60,13 +58,6 @@ def _make_token_count_line(
                     "output_tokens": output_tokens,
                     "reasoning_output_tokens": reasoning_tokens,
                     "total_tokens": total_tokens,
-                },
-                "last_token_usage": {
-                    "input_tokens": input_tokens,
-                    "cached_input_tokens": cached_input,
-                    "output_tokens": output_tokens,
-                    "reasoning_output_tokens": reasoning_tokens,
-                    "total_tokens": last_total_tokens if last_total_tokens is not None else total_tokens,
                 },
                 "model_context_window": context_window,
             },
@@ -120,7 +111,6 @@ class TestParseTokenCountEvent:
         assert partial.output_tokens == 40
         assert partial.reasoning_output_tokens == 24
         assert partial.context_window == 258_400
-        assert partial.current_context_tokens == 8821
 
         assert rate_limits is not None
         assert rate_limits.primary_used_pct == 1.0
@@ -142,18 +132,10 @@ class TestParseTokenCountEvent:
         assert rl is None
 
     def test_context_fill_pct_calculated_correctly(self):
-        raw = _make_token_count_line(total_tokens=999999, last_total_tokens=25840, context_window=258_400)
+        raw = _make_token_count_line(total_tokens=25840, context_window=258_400)
         partial, _ = _parse_token_count_event(raw)
         assert partial is not None
         assert abs(partial.context_fill_pct - 10.0) < 0.01
-
-    def test_uses_last_token_usage_for_context_fill_when_present(self):
-        raw = _make_token_count_line(total_tokens=500000, last_total_tokens=51680, context_window=258_400)
-        partial, _ = _parse_token_count_event(raw)
-        assert partial is not None
-        assert partial.total_tokens == 500000
-        assert partial.current_context_tokens == 51680
-        assert abs(partial.context_fill_pct - 20.0) < 0.01
 
 
 # ---------------------------------------------------------------------------
